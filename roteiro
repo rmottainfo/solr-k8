@@ -1,0 +1,315 @@
+Perfeito, isso é **100% cenário real de DevOps** 👍  
+Você **não precisa dos manifestos originais** para documentar o que está rodando. Como o **Solr foi instalado via Helm**, **tudo o que está em execução pode ser reconstruído a partir do cluster**.
+
+Vou te passar **um roteiro completo, prático e seguro** para levantar **TUDO** do namespace `solr`: recursos, Helm, manifests “reconstruídos”, values, annotations e estado real.
+
+***
+
+# ✅ Objetivo
+
+Levantar informações para documentar:
+
+*   O que está rodando no namespace `solr`
+*   Como o Apache Solr foi instalado
+*   Quais manifests estão em uso
+*   Configurações (values, envs, volumes, imagens, etc.)
+*   Metadados (labels, annotations, Helm)
+
+***
+
+## 1️⃣ Visão geral do namespace `solr`
+
+Comece com um inventário:
+
+```bash
+kubectl get all -n solr
+```
+
+Inclua recursos que **não aparecem no `get all`**:
+
+```bash
+kubectl get cm,secret,pvc,ingress,svc,sa,role,rolebinding -n solr
+```
+
+> ✅ Isso já vira uma tabela de “Componentes da Aplicação” na documentação.
+
+***
+
+## 2️⃣ Confirmar que foi instalado via Helm
+
+Liste os releases Helm no namespace:
+
+```bash
+helm list -n solr
+```
+
+Você deve ver algo como:
+
+```text
+NAME      NAMESPACE  REVISION  UPDATED   STATUS   CHART         APP VERSION
+solr     solr       1         ...       deployed solr-0.x.y    8.x
+```
+
+Guarde:
+
+*   **Nome do release**
+*   **Chart**
+*   **Versão**
+*   **App Version**
+
+***
+
+## 3️⃣ Obter os VALUES usados na instalação (fundamental)
+
+Mesmo sem ter salvo nada, o Helm **guarda os values**.
+
+```bash
+helm get values solr -n solr
+```
+
+Se quiser tudo (incluindo defaults):
+
+```bash
+helm get values solr -n solr --all
+```
+
+✅ Esse comando **é ouro**:
+
+*   Réplicas
+*   Storage
+*   Resources
+*   Zookeeper
+*   Imagem
+*   Configuração do Solr
+
+👉 Copie isso direto para a documentação como *“Configuração Helm aplicada”*.
+
+***
+
+## 4️⃣ Obter os manifests gerados pelo Helm (reconstrução total)
+
+Aqui você “recupera” os YAMLs que o Helm aplicou:
+
+```bash
+helm get manifest solr -n solr
+```
+
+Isso gera:
+
+*   StatefulSet
+*   Services
+*   ConfigMaps
+*   Secrets
+*   Roles
+*   PVCs
+
+✅ Esses **são os manifests reais em execução** (no momento da instalação).
+
+***
+
+## 5️⃣ Estado REAL no cluster (o que pode ter mudado)
+
+Helm ≠ estado atual (alguém pode ter alterado algo depois).
+
+Para documentar o **estado atual real**:
+
+### StatefulSet (principal do Solr)
+
+```bash
+kubectl get statefulset -n solr
+kubectl describe statefulset solr -n solr
+```
+
+Ou em YAML limpo:
+
+```bash
+kubectl get statefulset solr -n solr -o yaml
+```
+
+***
+
+### Pods (envs, args, imagem)
+
+```bash
+kubectl describe pod -n solr
+```
+
+Ou direto:
+
+```bash
+kubectl get pod -n solr -o yaml
+```
+
+Procure por:
+
+*   `image`
+*   `env`
+*   `args`
+*   `resources`
+*   `volumeMounts`
+
+***
+
+## 6️⃣ ConfigMaps e Secrets (configuração da aplicação)
+
+### ConfigMaps
+
+```bash
+kubectl get cm -n solr
+kubectl describe cm -n solr
+```
+
+YAML completo:
+
+```bash
+kubectl get cm nome-do-cm -n solr -o yaml
+```
+
+### Secrets (sem expor dados sensíveis)
+
+```bash
+kubectl get secret -n solr
+kubectl describe secret -n solr
+```
+
+> ✅ Na documentação, **não coloque valores**, apenas:
+>
+> *   Nome
+> *   Finalidade
+> *   Onde é usado
+
+***
+
+## 7️⃣ Volumes e persistência (muito importante)
+
+```bash
+kubectl get pvc -n solr
+kubectl describe pvc -n solr
+```
+
+Veja:
+
+*   StorageClass
+*   Size
+*   Bound PV
+*   Retention
+
+***
+
+## 8️⃣ Services e exposição
+
+```bash
+kubectl get svc -n solr
+kubectl describe svc -n solr
+```
+
+Se existir Ingress:
+
+```bash
+kubectl get ingress -n solr
+kubectl describe ingress -n solr
+```
+
+***
+
+## 9️⃣ Annotations e Labels (Helm + Kubernetes)
+
+Para pegar tudo de um recurso:
+
+```bash
+kubectl get statefulset solr -n solr -o jsonpath='{.metadata.annotations}'
+```
+
+Labels:
+
+```bash
+kubectl get statefulset solr -n solr -o jsonpath='{.metadata.labels}'
+```
+
+Você verá coisas como:
+
+*   `meta.helm.sh/release-name`
+*   `meta.helm.sh/release-namespace`
+*   `app.kubernetes.io/*`
+
+✅ Isso comprova instalação via Helm (bom para auditoria).
+
+***
+
+## 🔟 Zookeeper (se aplicável)
+
+Solr quase sempre depende de Zookeeper.
+
+```bash
+kubectl get all -n solr | grep zk
+```
+
+Ou:
+
+```bash
+helm get manifest solr -n solr | grep -i zookeeper
+```
+
+Documente:
+
+*   Embutido ou externo
+*   Réplicas
+*   PVCs
+
+***
+
+# 📄 Estrutura de documentação recomendada
+
+Você pode documentar assim (copiar/colar):
+
+    1. Visão Geral
+       - Aplicação: Apache Solr
+       - Namespace: solr
+       - Método de instalação: Helm
+
+    2. Helm
+       - Release: solr
+       - Chart: solr-x.y.z
+       - App Version: x.y
+
+    3. Componentes Kubernetes
+       - StatefulSet: solr
+       - Services: solr, solr-headless
+       - ConfigMaps: ...
+       - Secrets: ...
+       - PVCs: ...
+
+    4. Configuração
+       - Values Helm (resumo)
+       - Recursos (CPU/Memória)
+       - Storage
+
+    5. Exposição
+       - Service Type
+       - Ingress (se houver)
+
+    6. Persistência e Dados
+       - PVCs
+       - StorageClass
+
+    7. Observações
+       - Dependência de Zookeeper
+       - Annotations Helm
+
+***
+
+## ✅ Conclusão
+
+Mesmo sem manifestos salvos:
+
+*   ✅ Helm **guardou tudo**
+*   ✅ O cluster **é a fonte da verdade**
+*   ✅ Você consegue **documentar 100% da aplicação**
+
+Se quiser, no próximo passo posso te passar:
+
+*   ✅ **Checklist de auditoria**
+*   ✅ **Script único** que gera tudo isso em YAML
+*   ✅ **Comparar Helm vs estado atual**
+
+Só me diga.
