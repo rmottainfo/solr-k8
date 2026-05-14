@@ -1,0 +1,314 @@
+Perfeito. Vamos ser **100% pragmáticos**: **somente com `kubectl`** você consegue recuperar **quase tudo o que importa** para **documentar o Solr** **e** ajudar os devs a **operar/debugar a aplicação** — inclusive **configs internas do Solr** via API/CLI.
+
+Vou separar em **2 blocos claros**:
+
+1️⃣ **O que recuperar do Kubernetes usando apenas kubectl**  
+2️⃣ **Como usar o Solr (via pod) para extrair configurações e ajudar os devs**
+
+Tudo abaixo é **copy‑paste**, sem Helm.
+
+***
+
+# 1️⃣ O que dá para recuperar SÓ com `kubectl`
+
+## 1.1 Inventário completo do namespace `solr`
+
+```bash
+kubectl get all -n solr
+```
+
+Complemento obrigatório:
+
+```bash
+kubectl get cm,secret,pvc,svc,ingress,sa,role,rolebinding -n solr
+```
+
+👉 Isso vira:
+
+*   Arquitetura da aplicação
+*   Dependências
+*   Persistência
+*   Exposição
+
+***
+
+## 1.2 StatefulSet do Solr (principal)
+
+Esse é o **coração da aplicação**.
+
+```bash
+kubectl get statefulset -n solr
+kubectl describe statefulset -n solr
+```
+
+YAML real (estado atual):
+
+```bash
+kubectl get statefulset solr -n solr -o yaml
+```
+
+📌 Documente:
+
+*   Imagem (`image`)
+*   Réplicas
+*   Resources (CPU/Mem)
+*   Volumes
+*   Variáveis de ambiente
+*   Args / Command
+
+***
+
+## 1.3 Pods (runtime real)
+
+```bash
+kubectl get pods -n solr -o wide
+kubectl describe pod -n solr
+```
+
+Ou YAML direto:
+
+```bash
+kubectl get pod -n solr -o yaml
+```
+
+📌 Aqui você descobre:
+
+*   Porta do Solr
+*   JVM options
+*   Healthchecks
+*   ConfigMaps montados
+*   PVCs montados
+
+***
+
+## 1.4 ConfigMaps (configs da aplicação)
+
+```bash
+kubectl get cm -n solr
+kubectl describe cm -n solr
+```
+
+YAML completo:
+
+```bash
+kubectl get cm <nome> -n solr -o yaml
+```
+
+👉 Procure por:
+
+*   `solr.xml`
+*   `log4j`
+*   configs de collection
+
+***
+
+## 1.5 Secrets (sem expor conteúdo)
+
+```bash
+kubectl get secret -n solr
+kubectl describe secret -n solr
+```
+
+✅ Na documentação:
+
+*   Nome
+*   Tipo
+*   Onde é usado (env / volume)
+
+***
+
+## 1.6 Persistência (dados do Solr)
+
+```bash
+kubectl get pvc -n solr
+kubectl describe pvc -n solr
+```
+
+📌 Importante para os devs:
+
+*   Onde os índices ficam
+*   Retenção
+*   Impacto de restart
+
+***
+
+## 1.7 Services / acesso
+
+```bash
+kubectl get svc -n solr
+kubectl describe svc -n solr
+```
+
+Se existir Ingress:
+
+```bash
+kubectl get ingress -n solr
+kubectl describe ingress -n solr
+```
+
+***
+
+## 1.8 Prova de que foi Helm (sem helm)
+
+Mesmo sem Helm CLI:
+
+```bash
+kubectl get statefulset solr -n solr -o jsonpath='{.metadata.annotations}'
+```
+
+Você verá:
+
+    meta.helm.sh/release-name
+    meta.helm.sh/release-namespace
+
+✅ Isso **fecha auditoria/documentação**.
+
+***
+
+# 2️⃣ Usar o Solr para extrair configurações (ajuda REAL aos devs)
+
+Agora o diferencial: **entrar no pod e usar a API/CLI do Solr**.
+
+***
+
+## 2.1 Acessar um pod do Solr
+
+```bash
+kubectl get pods -n solr
+kubectl exec -it solr-0 -n solr -- bash
+```
+
+***
+
+## 2.2 Ver estrutura interna do Solr
+
+```bash
+ls /opt/solr/server/solr
+```
+
+Normalmente:
+
+*   `solr.xml`
+*   `collections/`
+*   `configsets/`
+
+***
+
+## 2.3 Listar collections (muito pedido por dev)
+
+Via API:
+
+```bash
+curl http://localhost:8983/solr/admin/collections?action=LIST
+```
+
+Ou via CLI:
+
+```bash
+solrctl collection --list
+```
+
+(se disponível)
+
+***
+
+## 2.4 Inspecionar config de uma collection
+
+Descubra o configset:
+
+```bash
+curl "http://localhost:8983/solr/admin/collections?action=CLUSTERSTATUS"
+```
+
+Depois:
+
+```bash
+ls /opt/solr/server/solr/configsets/<nome>
+```
+
+***
+
+## 2.5 Ver schema da collection (dificuldade comum)
+
+```bash
+curl http://localhost:8983/solr/<collection>/schema
+```
+
+Ou campos:
+
+```bash
+curl http://localhost:8983/solr/<collection>/schema/fields
+```
+
+✅ Isso resolve **80% das dúvidas dos devs**.
+
+***
+
+## 2.6 Ver configurações efetivas do Solr (runtime)
+
+```bash
+curl http://localhost:8983/solr/admin/info/system
+```
+
+```bash
+curl http://localhost:8983/solr/admin/info/jvm
+```
+
+📌 Aqui você documenta:
+
+*   Heap
+*   JVM args
+*   Versão real do Solr
+
+***
+
+## 2.7 Logs (debug rápido)
+
+```bash
+kubectl logs solr-0 -n solr
+```
+
+Ou acompanhar:
+
+```bash
+kubectl logs -f solr-0 -n solr
+```
+
+***
+
+# 3️⃣ O que NÃO dá para recuperar sem Helm
+
+Seja transparente na documentação:
+
+❌ Values originais do Helm  
+❌ Histórico de upgrades  
+❌ Defaults do chart
+
+✅ Mas tudo o que **está rodando hoje** você recupera.
+
+***
+
+# ✅ Checklist final (para documentação)
+
+*   [ ] Namespace `solr`
+*   [ ] StatefulSet (YAML)
+*   [ ] Services / Ingress
+*   [ ] ConfigMaps
+*   [ ] Secrets (referência)
+*   [ ] PVCs
+*   [ ] Collections
+*   [ ] Schema
+*   [ ] Configsets
+*   [ ] JVM / Heap
+*   [ ] Logs
+*   [ ] Annotations Helm
+
+***
+
+Se quiser, posso **te entregar um “guia rápido para devs”** só com:
+
+*   endpoints úteis do Solr
+*   comandos curl prontos
+*   onde olhar quando algo quebra
+
+Tudo **sem Helm** e focado em operação.
